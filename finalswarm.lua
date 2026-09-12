@@ -1,4 +1,4 @@
--- Final Swarm Utility Script (Auto Patrol V8)
+-- Final Swarm Utility Script (CFrame Fly Override V9)
 -- Compatible with Delta Executor
 -- Author: MrDon
 
@@ -24,12 +24,10 @@ local AutoAttack = false
 local WalkSpeedVal = 16
 local ESPEnabled = false
 
--- Fly & Patrol Variables
+-- CFrame Fly & Patrol Variables
 local Flying = false
 local FlySpeed = 50
 local FlyHeight = 0
-local BodyVelocity = nil
-local BodyGyro = nil
 local FlyConnection = nil
 
 local AutoPatrol = false
@@ -221,10 +219,10 @@ MainTab:CreateToggle({
 })
 
 -- ==========================================
--- ABSOLUTE FLY & AUTO PATROL SYSTEM
+-- CFRAME FLY & AUTO PATROL SYSTEM (NO PHYSICS)
 -- ==========================================
 MainTab:CreateToggle({
-   Name = "Enable Fly (Bật trước khi Patrol)",
+   Name = "Enable Fly (CFrame Override)",
    CurrentValue = false,
    Flag = "FlyToggle",
    Callback = function(Value)
@@ -235,55 +233,63 @@ MainTab:CreateToggle({
       local humanoid = character:WaitForChild("Humanoid")
       
       if Flying then
-         humanoid.PlatformStand = true 
-         BodyVelocity = Instance.new("BodyVelocity")
-         BodyGyro = Instance.new("BodyGyro")
-         BodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-         BodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-         BodyGyro.P = 3000
-         BodyVelocity.Parent, BodyGyro.Parent = root, root
+         -- Tắt tương tác vật lý của nhân vật
+         humanoid:ChangeState(Enum.HumanoidStateType.Physics)
          
          FlyConnection = RunService.RenderStepped:Connect(function(deltaTime)
             pcall(function()
+               -- Triệt tiêu gia tốc rơi tự do
+               root.Velocity = Vector3.new(0, 0, 0)
+               
                if AutoPatrol then
-                  -- Tính toán góc quay để tốc độ viền bằng FlySpeed
+                  -- Tính toán góc quay
                   local angularSpeed = FlySpeed / PatrolRadius
                   PatrolAngle = PatrolAngle + (angularSpeed * deltaTime)
                   
-                  -- Tính tọa độ mục tiêu trên đường tròn
+                  -- Tọa độ điểm tiếp theo trên đường tròn
                   local targetX = PatrolOrigin.X + PatrolRadius * math.cos(PatrolAngle)
                   local targetZ = PatrolOrigin.Z + PatrolRadius * math.sin(PatrolAngle)
                   local targetPos = Vector3.new(targetX, PatrolOrigin.Y + FlyHeight, targetZ)
                   
-                  local dir = (targetPos - root.Position)
-                  if dir.Magnitude > 0.1 then
-                     BodyVelocity.Velocity = dir.Unit * FlySpeed
-                     BodyGyro.CFrame = CFrame.new(root.Position, targetPos)
-                  end
+                  -- Hướng mặt về phía trước quỹ đạo
+                  local nextAngle = PatrolAngle + 0.1
+                  local lookX = PatrolOrigin.X + PatrolRadius * math.cos(nextAngle)
+                  local lookZ = PatrolOrigin.Z + PatrolRadius * math.sin(nextAngle)
+                  local lookPos = Vector3.new(lookX, targetPos.Y, lookZ)
+                  
+                  -- Dịch chuyển trực tiếp qua CFrame
+                  root.CFrame = CFrame.new(targetPos, lookPos)
                else
-                  -- Bay thủ công
+                  -- Bay điều khiển bằng tay
                   local camera = workspace.CurrentCamera
                   local moveDir = humanoid.MoveDirection
-                  BodyGyro.CFrame = camera.CFrame
+                  
+                  local moveVector = Vector3.new(0, 0, 0)
                   if moveDir.Magnitude > 0 then
-                     BodyVelocity.Velocity = (moveDir * FlySpeed) + Vector3.new(0, FlyHeight, 0)
-                  else
-                     BodyVelocity.Velocity = Vector3.new(0, FlyHeight, 0)
+                     moveVector = moveDir * (FlySpeed * deltaTime)
                   end
+                  
+                  -- Nâng/Hạ theo FlyHeight
+                  local heightVector = Vector3.new(0, (FlyHeight * deltaTime), 0)
+                  
+                  -- Dịch chuyển CFrame
+                  root.CFrame = root.CFrame + moveVector + heightVector
                end
             end)
          end)
       else
          if FlyConnection then FlyConnection:Disconnect() end
-         if BodyVelocity then BodyVelocity:Destroy() end
-         if BodyGyro then BodyGyro:Destroy() end
-         if humanoid then humanoid.PlatformStand = false end
+         if humanoid then 
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) 
+         end
       end
    end,
 })
 
 MainTab:CreateSlider({ Name = "Fly Speed", Range = {10, 200}, Increment = 5, Suffix = "Speed", CurrentValue = 50, Flag = "FlySpeedSlider", Callback = function(Value) FlySpeed = Value end })
-MainTab:CreateSlider({ Name = "Fly Altitude / Lift", Range = {-50, 100}, Increment = 5, Suffix = "Height", CurrentValue = 0, Flag = "FlyHeightSlider", Callback = function(Value) FlyHeight = Value end })
+
+-- Tách thanh Altitude (Sức nâng) cho CFrame Fly
+MainTab:CreateSlider({ Name = "Fly Altitude (Nâng tự động)", Range = {-50, 50}, Increment = 5, Suffix = "Height", CurrentValue = 0, Flag = "FlyHeightSlider", Callback = function(Value) FlyHeight = Value end })
 
 MainTab:CreateToggle({
    Name = "Auto Patrol (Bay vòng quanh tâm)",
@@ -295,7 +301,6 @@ MainTab:CreateToggle({
          pcall(function()
             local char = game.Players.LocalPlayer.Character
             if char and char:FindFirstChild("HumanoidRootPart") then
-               -- Lấy vị trí lúc vừa bật làm tâm quỹ đạo
                PatrolOrigin = char.HumanoidRootPart.Position
                PatrolAngle = 0
             end
@@ -304,17 +309,4 @@ MainTab:CreateToggle({
    end,
 })
 
-MainTab:CreateSlider({ Name = "Patrol Radius (Bán kính bay)", Range = {10, 500}, Increment = 10, Suffix = "Studs", CurrentValue = 50, Flag = "PatrolRadiusSlider", Callback = function(Value) PatrolRadius = Value end })
-
-game.Players.LocalPlayer.CharacterAdded:Connect(function(char)
-   char:WaitForChild("Humanoid").WalkSpeed = WalkSpeedVal
-   if Flying then Window.Flags["FlyToggle"]:Set(false) end
-   if AutoPatrol then Window.Flags["PatrolToggle"]:Set(false) end
-end)
-
-Rayfield:Notify({
-   Title = "Auto Patrol Activated",
-   Content = "Đã tích hợp module bay tự động quanh quỹ đạo.",
-   Duration = 4,
-   Image = 4483362458,
-})
+MainTab:CreateSlider({ Name = "Patrol Radius (Bán kính)", Range = {10, 500}, Increment = 10, Suffix = "Studs", CurrentValue = 50
