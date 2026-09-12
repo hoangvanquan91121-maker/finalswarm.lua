@@ -1,8 +1,20 @@
--- Final Swarm Utility Script (Master Movement Engine V11)
--- Compatible with Delta Executor
+-- Final Swarm Utility Script (Direct Execution V11)
+-- Có hệ thống chẩn đoán mạng tự động
 -- Author: MrDon
 
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local success, Rayfield = pcall(function()
+    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
+
+if not success or not Rayfield then
+    game.StarterGui:SetCore("SendNotification", {
+        Title = "Lỗi Mạng (Network Error)",
+        Text = "Mạng chặn UI. Hãy bật VPN (1.1.1.1) rồi chạy lại, boss man!",
+        Duration = 15
+    })
+    return -- Dừng script ngay lập tức để không bị treo máy
+end
+
 local VirtualUser = game:GetService("VirtualUser")
 local RunService = game:GetService("RunService")
 
@@ -40,7 +52,6 @@ local CardPriorities = {"damage", "health", "attack"}
 local AutoReroll = false
 local StopAtStats = {"cấp độ s", "mythic", "legendary", "godly"}
 
--- Helper: Split string
 local function parseWords(str)
    local parsed = {}
    for word in string.gmatch(str, '([^,]+)') do
@@ -222,9 +233,7 @@ MainTab:CreateSlider({
    Suffix = "Speed", 
    CurrentValue = 16, 
    Flag = "SpeedSlider",
-   Callback = function(Value) 
-      WalkSpeedVal = Value 
-   end,
+   Callback = function(Value) WalkSpeedVal = Value end,
 })
 
 MainTab:CreateToggle({
@@ -243,4 +252,75 @@ MainTab:CreateToggle({
    Flag = "PatrolToggle",
    Callback = function(Value)
       AutoPatrol = Value
-      if
+      if AutoPatrol then
+         pcall(function()
+            local char = game.Players.LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+               PatrolOrigin = char.HumanoidRootPart.Position
+               PatrolAngle = 0
+            end
+         end)
+      end
+   end,
+})
+MainTab:CreateSlider({ Name = "Patrol Radius (Bán kính)", Range = {10, 500}, Increment = 10, Suffix = "Studs", CurrentValue = 50, Flag = "PatrolRadiusSlider", Callback = function(Value) PatrolRadius = Value end })
+
+-- Động cơ di chuyển tổng hợp chạy trên mỗi khung hình
+RunService.RenderStepped:Connect(function(deltaTime)
+   pcall(function()
+      local player = game.Players.LocalPlayer
+      local char = player.Character
+      if not char then return end
+      
+      local root = char:FindFirstChild("HumanoidRootPart")
+      local hum = char:FindFirstChild("Humanoid")
+      if not root or not hum then return end
+
+      if Flying then
+         -- LÕI FLY
+         root.Velocity = Vector3.new(0, 0, 0)
+         
+         if AutoPatrol then
+            local angularSpeed = FlySpeed / PatrolRadius
+            PatrolAngle = PatrolAngle + (angularSpeed * deltaTime)
+            local targetX = PatrolOrigin.X + PatrolRadius * math.cos(PatrolAngle)
+            local targetZ = PatrolOrigin.Z + PatrolRadius * math.sin(PatrolAngle)
+            local targetPos = Vector3.new(targetX, root.Position.Y, targetZ)
+            local nextAngle = PatrolAngle + 0.1
+            local lookX = PatrolOrigin.X + PatrolRadius * math.cos(nextAngle)
+            local lookZ = PatrolOrigin.Z + PatrolRadius * math.sin(nextAngle)
+            local lookPos = Vector3.new(lookX, root.Position.Y, lookZ)
+            root.CFrame = CFrame.new(targetPos, lookPos) + Vector3.new(0, FlyHeight * deltaTime, 0)
+         else
+            local moveDir = hum.MoveDirection
+            local currentCFrame = root.CFrame
+            if moveDir.Magnitude > 0 then
+               currentCFrame = currentCFrame + (moveDir * FlySpeed * deltaTime)
+            end
+            currentCFrame = currentCFrame + Vector3.new(0, FlyHeight * deltaTime, 0)
+            root.CFrame = currentCFrame
+         end
+      else
+         -- LÕI ĐI BỘ (Bypass Anti-Cheat)
+         if WalkSpeedVal > 16 then
+            local moveDir = hum.MoveDirection
+            if moveDir.Magnitude > 0 then
+               local bonusSpeed = WalkSpeedVal - 16
+               root.CFrame = root.CFrame + (moveDir * bonusSpeed * deltaTime)
+            end
+         end
+      end
+   end)
+end)
+
+game.Players.LocalPlayer.CharacterAdded:Connect(function(char)
+   if Flying then Window.Flags["FlyToggle"]:Set(false) end
+   if AutoPatrol then Window.Flags["PatrolToggle"]:Set(false) end
+end)
+
+Rayfield:Notify({
+   Title = "System Online",
+   Content = "Thực thi trực tiếp thành công.",
+   Duration = 3,
+   Image = 4483362458,
+})
