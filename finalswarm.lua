@@ -1,4 +1,4 @@
--- Final Swarm Utility Script (CFrame Fly Override V9)
+-- Final Swarm Utility Script (Master Movement Engine V11)
 -- Compatible with Delta Executor
 -- Author: MrDon
 
@@ -21,14 +21,13 @@ local RerollTab = Window:CreateTab("Auto Reroll & Minigame", 4483362458)
 -- GLOBAL VARIABLES
 -- ==========================================
 local AutoAttack = false
-local WalkSpeedVal = 16
 local ESPEnabled = false
 
--- CFrame Fly & Patrol Variables
+-- Movement Engine Variables
+local WalkSpeedVal = 16
 local Flying = false
 local FlySpeed = 50
-local FlyHeight = 0
-local FlyConnection = nil
+local FlyHeight = 0 
 
 local AutoPatrol = false
 local PatrolRadius = 50
@@ -165,7 +164,7 @@ CardTab:CreateToggle({
 })
 
 -- ==========================================
--- COMBAT, MOVEMENT & ESP
+-- COMBAT, ESP & CORE FEATURES
 -- ==========================================
 MainTab:CreateToggle({
    Name = "Auto Attack / Auto Hit",
@@ -183,11 +182,6 @@ MainTab:CreateToggle({
          end
       end)
    end,
-})
-
-MainTab:CreateSlider({
-   Name = "WalkSpeed Modifier", Range = {16, 100}, Increment = 1, Suffix = "Speed", CurrentValue = 16, Flag = "SpeedSlider",
-   Callback = function(Value) WalkSpeedVal = Value pcall(function() game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = WalkSpeedVal end) end,
 })
 
 MainTab:CreateToggle({
@@ -219,77 +213,29 @@ MainTab:CreateToggle({
 })
 
 -- ==========================================
--- CFRAME FLY & AUTO PATROL SYSTEM (NO PHYSICS)
+-- MASTER MOVEMENT ENGINE (CFrame Override)
 -- ==========================================
-MainTab:CreateToggle({
-   Name = "Enable Fly (CFrame Override)",
-   CurrentValue = false,
-   Flag = "FlyToggle",
-   Callback = function(Value)
-      Flying = Value
-      local player = game.Players.LocalPlayer
-      local character = player.Character or player.CharacterAdded:Wait()
-      local root = character:WaitForChild("HumanoidRootPart")
-      local humanoid = character:WaitForChild("Humanoid")
-      
-      if Flying then
-         -- Tắt tương tác vật lý của nhân vật
-         humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-         
-         FlyConnection = RunService.RenderStepped:Connect(function(deltaTime)
-            pcall(function()
-               -- Triệt tiêu gia tốc rơi tự do
-               root.Velocity = Vector3.new(0, 0, 0)
-               
-               if AutoPatrol then
-                  -- Tính toán góc quay
-                  local angularSpeed = FlySpeed / PatrolRadius
-                  PatrolAngle = PatrolAngle + (angularSpeed * deltaTime)
-                  
-                  -- Tọa độ điểm tiếp theo trên đường tròn
-                  local targetX = PatrolOrigin.X + PatrolRadius * math.cos(PatrolAngle)
-                  local targetZ = PatrolOrigin.Z + PatrolRadius * math.sin(PatrolAngle)
-                  local targetPos = Vector3.new(targetX, PatrolOrigin.Y + FlyHeight, targetZ)
-                  
-                  -- Hướng mặt về phía trước quỹ đạo
-                  local nextAngle = PatrolAngle + 0.1
-                  local lookX = PatrolOrigin.X + PatrolRadius * math.cos(nextAngle)
-                  local lookZ = PatrolOrigin.Z + PatrolRadius * math.sin(nextAngle)
-                  local lookPos = Vector3.new(lookX, targetPos.Y, lookZ)
-                  
-                  -- Dịch chuyển trực tiếp qua CFrame
-                  root.CFrame = CFrame.new(targetPos, lookPos)
-               else
-                  -- Bay điều khiển bằng tay
-                  local camera = workspace.CurrentCamera
-                  local moveDir = humanoid.MoveDirection
-                  
-                  local moveVector = Vector3.new(0, 0, 0)
-                  if moveDir.Magnitude > 0 then
-                     moveVector = moveDir * (FlySpeed * deltaTime)
-                  end
-                  
-                  -- Nâng/Hạ theo FlyHeight
-                  local heightVector = Vector3.new(0, (FlyHeight * deltaTime), 0)
-                  
-                  -- Dịch chuyển CFrame
-                  root.CFrame = root.CFrame + moveVector + heightVector
-               end
-            end)
-         end)
-      else
-         if FlyConnection then FlyConnection:Disconnect() end
-         if humanoid then 
-            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) 
-         end
-      end
+MainTab:CreateSlider({
+   Name = "Tốc độ chạy (WalkSpeed CFrame)", 
+   Range = {16, 200}, 
+   Increment = 1, 
+   Suffix = "Speed", 
+   CurrentValue = 16, 
+   Flag = "SpeedSlider",
+   Callback = function(Value) 
+      WalkSpeedVal = Value 
    end,
 })
 
-MainTab:CreateSlider({ Name = "Fly Speed", Range = {10, 200}, Increment = 5, Suffix = "Speed", CurrentValue = 50, Flag = "FlySpeedSlider", Callback = function(Value) FlySpeed = Value end })
+MainTab:CreateToggle({
+   Name = "Enable Fly (An Toàn Cho Joystick)",
+   CurrentValue = false,
+   Flag = "FlyToggle",
+   Callback = function(Value) Flying = Value end,
+})
 
--- Tách thanh Altitude (Sức nâng) cho CFrame Fly
-MainTab:CreateSlider({ Name = "Fly Altitude (Nâng tự động)", Range = {-50, 50}, Increment = 5, Suffix = "Height", CurrentValue = 0, Flag = "FlyHeightSlider", Callback = function(Value) FlyHeight = Value end })
+MainTab:CreateSlider({ Name = "Tốc độ Bay (Fly Speed)", Range = {10, 200}, Increment = 5, Suffix = "Speed", CurrentValue = 50, Flag = "FlySpeedSlider", Callback = function(Value) FlySpeed = Value end })
+MainTab:CreateSlider({ Name = "Tốc độ Nâng/Hạ (Cao độ)", Range = {-50, 50}, Increment = 5, Suffix = "Studs/s", CurrentValue = 0, Flag = "FlyHeightSlider", Callback = function(Value) FlyHeight = Value end })
 
 MainTab:CreateToggle({
    Name = "Auto Patrol (Bay vòng quanh tâm)",
@@ -297,16 +243,4 @@ MainTab:CreateToggle({
    Flag = "PatrolToggle",
    Callback = function(Value)
       AutoPatrol = Value
-      if AutoPatrol then
-         pcall(function()
-            local char = game.Players.LocalPlayer.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-               PatrolOrigin = char.HumanoidRootPart.Position
-               PatrolAngle = 0
-            end
-         end)
-      end
-   end,
-})
-
-MainTab:CreateSlider({ Name = "Patrol Radius (Bán kính)", Range = {10, 500}, Increment = 10, Suffix = "Studs", CurrentValue = 50
+      if
