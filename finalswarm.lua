@@ -1,5 +1,5 @@
--- Final Swarm Utility Script (Clean Core V6 - Anti-Spam & Parent Validation)
--- Fix triệt để lỗi spam click do nhận diện nhầm chữ/ngọc xanh
+-- Final Swarm Utility Script (Clean Core V7 - PC Spacebar Trigger)
+-- Tối ưu hóa cho PC/Laptop: Tốc độ quét Max FPS, sử dụng phím Space để Grade
 -- Author: MrDon
 
 local success, Rayfield = pcall(function()
@@ -7,23 +7,22 @@ local success, Rayfield = pcall(function()
 end)
 
 if not success or not Rayfield then
-    game.StarterGui:SetCore("SendNotification", { Title = "Lỗi Mạng", Text = "Vui lòng bật VPN (1.1.1.1) rồi chạy lại.", Duration = 10 })
+    warn("Lỗi tải Rayfield UI")
     return 
 end
 
 local VIM = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
-local Cam = workspace.CurrentCamera
 
 local Window = Rayfield:CreateWindow({
-   Name = "Final Swarm | Core Engine V6",
-   LoadingTitle = "Khởi tạo hệ thống cốt lõi...",
+   Name = "Final Swarm | Master PC V7",
+   LoadingTitle = "Khởi tạo hệ thống PC...",
    LoadingSubtitle = "by MrDon",
    ConfigurationSaving = { Enabled = false }
 })
 
 local MoveTab = Window:CreateTab("Movement (Di Chuyển)", 4483362458)
-local GradeTab = Window:CreateTab("Auto Grade Minigame", 4483362458)
+local GradeTab = Window:CreateTab("Auto Grade (Spacebar)", 4483362458)
 
 -- ==========================================
 -- GLOBAL VARIABLES
@@ -39,7 +38,7 @@ local PatrolAngle = 0
 
 -- Minigame Variables
 local AutoGrade = false
-local GradeTolerance = 10
+local GradeTolerance = 12 -- Để mức 12 cho PC dễ bắt dính
 local ClickCooldown = false
 
 local CachedNeedle = nil
@@ -50,8 +49,7 @@ local IsNeedleMoving = false
 -- MOVEMENT MODULE
 -- ==========================================
 MoveTab:CreateSlider({
-   Name = "Tốc độ chạy (CFrame Bypass)", 
-   Range = {16, 200}, Increment = 1, Suffix = "Speed", CurrentValue = 16, Flag = "SpeedSlider",
+   Name = "Tốc độ chạy (CFrame Bypass)", Range = {16, 200}, Increment = 1, Suffix = "Speed", CurrentValue = 16, Flag = "SpeedSlider",
    Callback = function(Value) WalkSpeedVal = Value end,
 })
 
@@ -92,10 +90,10 @@ MoveTab:CreateSlider({
 })
 
 -- ==========================================
--- ANTI-SPAM AUTO GRADE MODULE
+-- PC SPACEBAR AUTO GRADE MODULE
 -- ==========================================
 GradeTab:CreateToggle({
-   Name = "Bật Auto Grade (Anti-Spam Click)",
+   Name = "Bật Auto Grade (Gõ Space)",
    CurrentValue = false,
    Flag = "AutoGradeFlag",
    Callback = function(Value)
@@ -105,21 +103,19 @@ GradeTab:CreateToggle({
          local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
          local lastRotMap = {}
          
-         -- 1. QUÉT TÌM VẬT THỂ MINIGAME CHUẨN (Chạy ngầm 0.5s/lần)
+         -- 1. QUÉT TÌM GIAO DIỆN (Quét nhanh hơn trên PC: 0.2s/lần)
          task.spawn(function()
             while AutoGrade do
                pcall(function()
                   local foundNeedle = nil
                   local foundTarget = nil
                   
-                  -- Quét tất cả GUI
                   for _, gui in pairs(playerGui:GetDescendants()) do
                      if gui:IsA("GuiObject") and gui.Visible and gui.Parent then
                         local r = gui.Rotation
                         local lastR = lastRotMap[gui] or r
                         local diffRot = math.abs(r - lastR)
                         
-                        -- Vạch vàng phải là vật thể có Rotation thay đổi liên tục
                         if diffRot > 0.5 and diffRot < 120 then
                            foundNeedle = gui
                            IsNeedleMoving = true
@@ -128,12 +124,10 @@ GradeTab:CreateToggle({
                      end
                   end
                   
-                  -- Nếu tìm thấy Vạch Vàng, tìm Vạch Xanh NẰM CÙNG KHUNG MẸ (Parent)
                   if foundNeedle and foundNeedle.Parent then
                      local minigameFrame = foundNeedle.Parent
                      for _, child in pairs(minigameFrame:GetChildren()) do
                         if child ~= foundNeedle and child:IsA("GuiObject") and child.Visible then
-                           -- Kiểm tra màu xanh lá cây đại diện cho vạch đích
                            local isGreen = false
                            if child:IsA("ImageLabel") or child:IsA("ImageButton") then
                               local c = child.ImageColor3
@@ -143,10 +137,7 @@ GradeTab:CreateToggle({
                               if c.G > 0.5 and c.R < 0.5 then isGreen = true end
                            end
                            
-                           if isGreen then
-                              foundTarget = child
-                              break
-                           end
+                           if isGreen then foundTarget = child; break end
                         end
                      end
                   end
@@ -154,14 +145,14 @@ GradeTab:CreateToggle({
                   CachedNeedle = foundNeedle
                   CachedTarget = foundTarget
                end)
-               task.wait(0.5)
+               task.wait(0.2) -- PC gánh tốt, quét liên tục 0.2s
             end
          end)
 
-         -- 2. LUỒNG BẤM TỰ ĐỘNG (CHỈ BẤM KHI ĐỦ ĐIỀU KIỆN CHÍNH XÁC)
+         -- 2. LUỒNG BẤM TỰ ĐỘNG BẰNG PHÍM SPACE
          task.spawn(function()
             while AutoGrade do
-               RunService.RenderStepped:Wait()
+               RunService.RenderStepped:Wait() -- Chạy theo FPS của Laptop (cực chuẩn)
                pcall(function()
                   if CachedNeedle and CachedTarget and CachedNeedle.Visible and CachedTarget.Visible and IsNeedleMoving then
                      local needleRot = CachedNeedle.Rotation
@@ -170,21 +161,17 @@ GradeTab:CreateToggle({
                      local diff = math.abs(needleRot - targetRot)
                      if diff > 180 then diff = 360 - diff end
                      
-                     -- Chỉ nhấp khi: Vạch vàng lọt vào vạch xanh AND không trong thời gian chờ (Cooldown)
+                     -- Điều kiện bấm
                      if diff <= GradeTolerance and not ClickCooldown then
                         ClickCooldown = true
                         
-                        local centerX = Cam.ViewportSize.X / 2
-                        local centerY = Cam.ViewportSize.Y / 2
-                        
-                        VIM:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
+                        -- GIẢ LẬP NHẤN PHÍM SPACE (Khoan thủng mọi Anti-Click)
+                        VIM:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
                         task.wait(0.01)
-                        VIM:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
+                        VIM:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
                         
-                        -- Khóa bấm 0.35s để chờ minigame chuyển vạch xanh mới
-                        task.delay(0.35, function() 
-                           ClickCooldown = false 
-                        end)
+                        -- Đợi 0.3s cho UI reset vạch xanh
+                        task.delay(0.3, function() ClickCooldown = false end)
                      end
                   end
                end)
@@ -200,8 +187,13 @@ GradeTab:CreateToggle({
 
 GradeTab:CreateSlider({
    Name = "Độ chính xác vùng xanh (Tolerance)", 
-   Range = {3, 25}, Increment = 1, Suffix = "Độ", CurrentValue = 10, Flag = "GradeToleranceSlider",
+   Range = {3, 25}, Increment = 1, Suffix = "Độ", CurrentValue = 12, Flag = "GradeToleranceSlider",
    Callback = function(Value) GradeTolerance = Value end,
+})
+
+GradeTab:CreateParagraph({
+   Title = "⚡ Nâng cấp PC",
+   Content = "Bot hiện tại sử dụng giả lập phím cách (Spacebar). Khi vạch vàng chạm vạch xanh, bot sẽ tự gõ Space siêu tốc."
 })
 
 -- ==========================================
@@ -249,4 +241,4 @@ game.Players.LocalPlayer.CharacterAdded:Connect(function()
    if AutoPatrol then Window.Flags["PatrolToggle"]:Set(false) end
 end)
 
-Rayfield:Notify({ Title = "V6 Anti-Spam Ready", Content = "Đã khóa khung nhận diện. Không còn hiện tượng bấm liên tục.", Duration = 4, Image = 4483362458 })
+Rayfield:Notify({ Title = "PC Engine V7 Ready", Content = "Đã chuyển sang giả lập Spacebar. Tối đa hóa tốc độ xử lý.", Duration = 4, Image = 4483362458 })
