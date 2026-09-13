@@ -1,5 +1,5 @@
--- Final Swarm Utility Script (Clean Core V5 - Mobile Lag-Free Edition)
--- Tối ưu hóa CPU điện thoại: Giảm tải lag 90%, chống bấm sai vị trí
+-- Final Swarm Utility Script (Clean Core V6 - Anti-Spam & Parent Validation)
+-- Fix triệt để lỗi spam click do nhận diện nhầm chữ/ngọc xanh
 -- Author: MrDon
 
 local success, Rayfield = pcall(function()
@@ -16,7 +16,7 @@ local RunService = game:GetService("RunService")
 local Cam = workspace.CurrentCamera
 
 local Window = Rayfield:CreateWindow({
-   Name = "Final Swarm | Core Engine V5",
+   Name = "Final Swarm | Core Engine V6",
    LoadingTitle = "Khởi tạo hệ thống cốt lõi...",
    LoadingSubtitle = "by MrDon",
    ConfigurationSaving = { Enabled = false }
@@ -39,12 +39,12 @@ local PatrolAngle = 0
 
 -- Minigame Variables
 local AutoGrade = false
-local GradeTolerance = 8 -- Độ lệch góc (Siết chặt để chống bấm ngoài vùng xanh)
+local GradeTolerance = 10
 local ClickCooldown = false
 
--- UI Cache Objects (Khóa đối tượng UI để chống lag)
 local CachedNeedle = nil
 local CachedTarget = nil
+local IsNeedleMoving = false
 
 -- ==========================================
 -- MOVEMENT MODULE
@@ -92,10 +92,10 @@ MoveTab:CreateSlider({
 })
 
 -- ==========================================
--- LAG-FREE AUTO GRADE MODULE
+-- ANTI-SPAM AUTO GRADE MODULE
 -- ==========================================
 GradeTab:CreateToggle({
-   Name = "Bật Auto Grade (Siêu mượt cho Mobile)",
+   Name = "Bật Auto Grade (Anti-Spam Click)",
    CurrentValue = false,
    Flag = "AutoGradeFlag",
    Callback = function(Value)
@@ -103,31 +103,50 @@ GradeTab:CreateToggle({
       
       if AutoGrade then
          local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+         local lastRotMap = {}
          
-         -- 1. LUỒNG TÌM KIẾM UI (Chạy ngầm 1 giây / 1 lần -> TRIỆT PHÁ LAG)
+         -- 1. QUÉT TÌM VẬT THỂ MINIGAME CHUẨN (Chạy ngầm 0.5s/lần)
          task.spawn(function()
-            local lastRotMap = {}
             while AutoGrade do
                pcall(function()
                   local foundNeedle = nil
                   local foundTarget = nil
                   
+                  -- Quét tất cả GUI
                   for _, gui in pairs(playerGui:GetDescendants()) do
-                     if gui:IsA("GuiObject") and gui.Visible then
+                     if gui:IsA("GuiObject") and gui.Visible and gui.Parent then
                         local r = gui.Rotation
                         local lastR = lastRotMap[gui] or r
+                        local diffRot = math.abs(r - lastR)
                         
-                        -- Tìm vạch vàng xoay
-                        if math.abs(r - lastR) > 0.1 then
+                        -- Vạch vàng phải là vật thể có Rotation thay đổi liên tục
+                        if diffRot > 0.5 and diffRot < 120 then
                            foundNeedle = gui
+                           IsNeedleMoving = true
                         end
                         lastRotMap[gui] = r
-                        
-                        -- Tìm vạch xanh
-                        if (gui:IsA("ImageLabel") or gui:IsA("ImageButton")) and gui.ImageColor3.G > 0.6 and gui.ImageColor3.R < 0.6 then
-                           foundTarget = gui
-                        elseif gui:IsA("Frame") and gui.BackgroundColor3.G > 0.6 and gui.BackgroundColor3.R < 0.6 then
-                           foundTarget = gui
+                     end
+                  end
+                  
+                  -- Nếu tìm thấy Vạch Vàng, tìm Vạch Xanh NẰM CÙNG KHUNG MẸ (Parent)
+                  if foundNeedle and foundNeedle.Parent then
+                     local minigameFrame = foundNeedle.Parent
+                     for _, child in pairs(minigameFrame:GetChildren()) do
+                        if child ~= foundNeedle and child:IsA("GuiObject") and child.Visible then
+                           -- Kiểm tra màu xanh lá cây đại diện cho vạch đích
+                           local isGreen = false
+                           if child:IsA("ImageLabel") or child:IsA("ImageButton") then
+                              local c = child.ImageColor3
+                              if c.G > 0.5 and c.R < 0.5 then isGreen = true end
+                           elseif child:IsA("Frame") then
+                              local c = child.BackgroundColor3
+                              if c.G > 0.5 and c.R < 0.5 then isGreen = true end
+                           end
+                           
+                           if isGreen then
+                              foundTarget = child
+                              break
+                           end
                         end
                      end
                   end
@@ -135,24 +154,23 @@ GradeTab:CreateToggle({
                   CachedNeedle = foundNeedle
                   CachedTarget = foundTarget
                end)
-               task.wait(1) -- Quét lại sau mỗi 1 giây để nhẹ máy
+               task.wait(0.5)
             end
          end)
 
-         -- 2. LUỒNG TÍNH TOÁN BẤM THỜI GIAN THỰC (Nhẹ tuyệt đối)
+         -- 2. LUỒNG BẤM TỰ ĐỘNG (CHỈ BẤM KHI ĐỦ ĐIỀU KIỆN CHÍNH XÁC)
          task.spawn(function()
             while AutoGrade do
                RunService.RenderStepped:Wait()
                pcall(function()
-                  if CachedNeedle and CachedTarget and CachedNeedle.Visible and CachedTarget.Visible then
+                  if CachedNeedle and CachedTarget and CachedNeedle.Visible and CachedTarget.Visible and IsNeedleMoving then
                      local needleRot = CachedNeedle.Rotation
                      local targetRot = CachedTarget.Rotation
                      
-                     -- Tính khoảng cách góc chính xác
                      local diff = math.abs(needleRot - targetRot)
                      if diff > 180 then diff = 360 - diff end
                      
-                     -- CHỈ BẤM KHI VẠCH VÀNG THỰC SỰ CHUI VÀO VẠCH XANH
+                     -- Chỉ nhấp khi: Vạch vàng lọt vào vạch xanh AND không trong thời gian chờ (Cooldown)
                      if diff <= GradeTolerance and not ClickCooldown then
                         ClickCooldown = true
                         
@@ -163,8 +181,10 @@ GradeTab:CreateToggle({
                         task.wait(0.01)
                         VIM:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
                         
-                        -- Đóng băng 0.15s cho vạch xanh nhảy vị trí mới
-                        task.delay(0.15, function() ClickCooldown = false end)
+                        -- Khóa bấm 0.35s để chờ minigame chuyển vạch xanh mới
+                        task.delay(0.35, function() 
+                           ClickCooldown = false 
+                        end)
                      end
                   end
                end)
@@ -173,13 +193,14 @@ GradeTab:CreateToggle({
       else
          CachedNeedle = nil
          CachedTarget = nil
+         IsNeedleMoving = false
       end
    end,
 })
 
 GradeTab:CreateSlider({
    Name = "Độ chính xác vùng xanh (Tolerance)", 
-   Range = {3, 20}, Increment = 1, Suffix = "Độ", CurrentValue = 8, Flag = "GradeToleranceSlider",
+   Range = {3, 25}, Increment = 1, Suffix = "Độ", CurrentValue = 10, Flag = "GradeToleranceSlider",
    Callback = function(Value) GradeTolerance = Value end,
 })
 
@@ -228,4 +249,4 @@ game.Players.LocalPlayer.CharacterAdded:Connect(function()
    if AutoPatrol then Window.Flags["PatrolToggle"]:Set(false) end
 end)
 
-Rayfield:Notify({ Title = "V5 Optimization Ready", Content = "Đã tối ưu hóa CPU cho điện thoại yếu. Không lag, không bấm nhầm.", Duration = 4, Image = 4483362458 })
+Rayfield:Notify({ Title = "V6 Anti-Spam Ready", Content = "Đã khóa khung nhận diện. Không còn hiện tượng bấm liên tục.", Duration = 4, Image = 4483362458 })
